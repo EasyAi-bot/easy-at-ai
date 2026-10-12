@@ -15,7 +15,7 @@ class ImageRequest(BaseModel):
     model: str = 'black-forest-labs/FLUX.1-schnell'
 
 
-def 
+
 
 def get_token(authorization: Optional[str]) -> str:
     # Use the private token saved in Render first.
