@@ -62,7 +62,7 @@ def index():
 
 @app.get('/api/health')
 def health():
-    return {'ok': True, 'service': 'easy@Ai cloud bridge', 'image_generation': 'Hugging Face Inference Providers', 'video_generation': 'Hugging Face Inference Providers', 'token_storage': 'not stored'}
+    return {'ok': True, 'service': 'easy@Ai cloud bridge', 'image_generation': 'Hugging Face Inference Providers', 'video_generation': 'Hugging Face Inference Providers','token_storage': 'Render environment variable'}
 
 @app.post('/api/image')
 def generate_image(req: ImageRequest, authorization: Optional[str] = Header(default=None)):
