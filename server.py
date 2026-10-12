@@ -15,7 +15,27 @@ class ImageRequest(BaseModel):
     model: str = 'black-forest-labs/FLUX.1-schnell'
 
 
+def 
 def get_token(authorization: Optional[str]) -> str:
+    token = os.environ.get('HF_TOKEN', '').strip()
+
+    if not token and authorization and authorization.lower().startswith('bearer '):
+        token = authorization.split(' ', 1)[1].strip()
+
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail='No Hugging Face token is configured. Add HF_TOKEN in Render Environment Variables.'
+        )
+
+    if not token.startswith('hf_'):
+        raise HTTPException(
+            status_code=401,
+            detail='The Hugging Face token format is invalid. Check the token configured in Render.'
+        )
+
+    return token
+(authorization: Optional[str]) -> str:
     if not authorization or not authorization.lower().startswith('bearer '):
         raise HTTPException(status_code=401, detail='Add your Hugging Face access token in easy@Ai. The token is not saved by this server.')
     token = authorization.split(' ', 1)[1].strip()
