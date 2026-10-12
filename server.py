@@ -16,32 +16,29 @@ class ImageRequest(BaseModel):
 
 
 def 
-def get_token(authorization: Optional[str]) -> str:
-    token = os.environ.get('HF_TOKEN', '').strip()
 
-    if not token and authorization and authorization.lower().startswith('bearer '):
-        token = authorization.split(' ', 1)[1].strip()
+def get_token(authorization: Optional[str]) -> str:
+    # Use the private token saved in Render first.
+    token = os.environ.get("HF_TOKEN", "").strip()
+
+    # If no Render token exists, allow a token supplied by the website.
+    if not token and authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
 
     if not token:
         raise HTTPException(
             status_code=401,
-            detail='No Hugging Face token is configured. Add HF_TOKEN in Render Environment Variables.'
+            detail="No Hugging Face token is configured. Add HF_TOKEN in Render Environment Variables."
         )
 
-    if not token.startswith('hf_'):
+    if not token.startswith("hf_"):
         raise HTTPException(
             status_code=401,
-            detail='The Hugging Face token format is invalid. Check the token configured in Render.'
+            detail="The Hugging Face token format is invalid. Check the token configured in Render."
         )
 
     return token
-(authorization: Optional[str]) -> str:
-    if not authorization or not authorization.lower().startswith('bearer '):
-        raise HTTPException(status_code=401, detail='Add your Hugging Face access token in easy@Ai. The token is not saved by this server.')
-    token = authorization.split(' ', 1)[1].strip()
-    if not token.startswith('hf_'):
-        raise HTTPException(status_code=401, detail='That does not look like a Hugging Face token. Use a token beginning with hf_.')
-    return token
+
 
 
 def provider_error(exc: Exception) -> HTTPException:
