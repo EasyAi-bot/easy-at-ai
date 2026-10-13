@@ -57,9 +57,113 @@ function toggleTokenVisibility(){const el=document.getElementById('hfToken');el.
 function refreshGenerationCharacters(){const el=document.getElementById('genCharacter');if(!el)return;const chosen=el.value;el.innerHTML='<option value="">No saved character</option>'+data.characters.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');if(data.characters.some(c=>c.id===chosen))el.value=chosen}
 async function checkAiBridge(){const el=document.getElementById('bridgeStatus');el.textContent='Checking easy@Ai cloud service…';try{const r=await fetch('/api/health');if(!r.ok)throw new Error('The easy@Ai cloud service did not respond.');const j=await r.json();const token=document.getElementById('hfToken').value.trim();if(!token){el.textContent='easy@Ai cloud service connected. Paste a Hugging Face token and click again to validate it. Token storage: '+j.token_storage+'.';return}const vr=await fetch('/api/check-token',{method:'POST',headers:{'Authorization':'Bearer '+token}});if(!vr.ok)throw new Error(await responseError(vr));const v=await vr.json();el.textContent='easy@Ai cloud service connected. Hugging Face token is valid for account '+v.username+'. '+v.note;}catch(e){el.textContent='Connection check failed: '+e.message+' If the service has just gone idle, wait about a minute and refresh the page.';}}
 function addCharacterToImagePrompt(){const id=document.getElementById('genCharacter').value;const c=data.characters.find(x=>x.id===id);if(!c){toast('Choose a saved character first.');return}const area=document.getElementById('imagePrompt');const identity=characterPrompt(c);area.value=(area.value.trim()?area.value.trim()+'\n\n':'')+'CHARACTER IDENTITY — '+c.name+':\n'+identity+'\n\nCONTINUITY RULE: Preserve the same facial structure, skin tone, hair, age, body build, and outfit. Do not invent a new face or accessories.';toast('Character details inserted into prompt.')}
-async function responseError(r){let msg='Request failed ('+r.status+').';try{const j=await r.json();msg=j.detail||j.error||msg}catch(e){}return msg}
-async function generateImageNow(){const prompt=document.getElementById('imagePrompt').value.trim();if(prompt.length<5){toast('Write a detailed image prompt first.');return}let headers;try{headers=authHeaders()}catch(e){return}const reference=document.getElementById('imageReference').files[0];const btn=document.getElementById('imageGenerateBtn'),status=document.getElementById('imageStatus');btn.disabled=true;btn.textContent=reference?'Editing reference…':'Generating…';status.textContent=reference?'Sending reference image and prompt to the image-edit model.':'Sending request to Hugging Face. This can take a while; do not close the page.';try{let r;if(reference){const form=new FormData();form.append('prompt',prompt);form.append('model','Qwen/Qwen-Image-Edit');form.append('image',reference);r=await fetch('/api/image-edit',{method:'POST',headers,body:form})}else{r=await fetch('/api/image',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({prompt,model:document.getElementById('imageModel').value})})}if(!r.ok)throw new Error(await responseError(r));const blob=await r.blob();if(!blob.type.startsWith('image/'))throw new Error('The provider did not return an image.');lastImageBlob=blob;if(lastImageUrl)URL.revokeObjectURL(lastImageUrl);lastImageUrl=URL.createObjectURL(blob);const img=document.getElementById('generatedImage');img.src=lastImageUrl;img.style.display='block';const a=document.getElementById('imageDownload');a.href=lastImageUrl;a.style.display='inline-flex';document.getElementById('useImageForVideo').style.display='inline-flex';status.textContent=reference?'Reference-guided image generated. Review it and download it; identity may still vary.':'Image generated successfully. Review it, download it, or use it as the starting frame for video.';}catch(e){status.textContent=status.textContent='Image generation failed: '+(e.message||'Unknown error');
-toast('Check the error message below Generate image.')}finally{btn.disabled=false;btn.textContent='Generate image'}}
+async function responseError(r) {
+  const fallback = `Request failed (${r.status} ${r.statusText || ""}).`;
+  try {
+    const text = await r.text();
+    if (!text) return fallback;
+    try {
+      const j = JSON.parse(text);
+      const detail = j.detail || j.error || j.message;
+      if (typeof detail === "string") return detail;
+      if (detail) return JSON.stringify(detail);
+      return text.slice(0, 1500);
+    } catch {
+      return text.slice(0, 1500);
+    }
+  } catch {
+    return fallback;
+  }
+}
+async function generateImageNow() {
+  const prompt = document.getElementById("imagePrompt").value.trim();
+  const btn = document.getElementById("imageGenerateBtn");
+  const status = document.getElementById("imageStatus");
+
+  if (prompt.length < 5) {
+    status.textContent = "Please enter a more detailed image prompt.";
+    status.style.color = "#ffb6c1";
+    toast("Write an image prompt first.");
+    return;
+  }
+
+  let headers;
+  try {
+    headers = authHeaders();
+  } catch (e) {
+    status.textContent = e.message;
+    status.style.color = "#ffb6c1";
+    return;
+  }
+
+  const reference = document.getElementById("imageReference").files[0];
+  btn.disabled = true;
+  btn.textContent = reference ? "Editing reference…" : "Generating…";
+  status.style.color = "#c7a8ff";
+  status.textContent = "Connecting to the image provider. Please wait…";
+
+  try {
+    let r;
+    if (reference) {
+      const form = new FormData();
+      form.append("prompt", prompt);
+      form.append("model", "Qwen/Qwen-Image-Edit");
+      form.append("image", reference);
+      r = await fetch("/api/image-edit", {
+        method: "POST",
+        headers,
+        body: form
+      });
+    } else {
+      r = await fetch("/api/image", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt,
+          model: document.getElementById("imageModel").value
+        })
+      });
+    }
+
+    if (!r.ok) throw new Error(await responseError(r));
+
+    const blob = await r.blob();
+    if (!blob.type.startsWith("image/")) {
+      throw new Error(
+        "The server responded, but did not return an image. Response type: " +
+        (blob.type || "unknown")
+      );
+    }
+
+    lastImageBlob = blob;
+    if (lastImageUrl) URL.revokeObjectURL(lastImageUrl);
+    lastImageUrl = URL.createObjectURL(blob);
+
+    const img = document.getElementById("generatedImage");
+    img.src = lastImageUrl;
+    img.style.display = "block";
+
+    const downloadLink = document.getElementById("imageDownload");
+    downloadLink.href = lastImageUrl;
+    downloadLink.style.display = "inline-flex";
+    document.getElementById("useImageForVideo").style.display = "inline-flex";
+
+    status.style.color = "#87e3bd";
+    status.textContent = "Image generated successfully. You can preview or download it.";
+    toast("Image generated successfully.");
+  } catch (e) {
+    const message = e && e.message ? e.message : String(e || "Unknown error");
+    status.style.color = "#ffb6c1";
+    status.style.whiteSpace = "pre-wrap";
+    status.style.overflowWrap = "anywhere";
+    status.textContent = "IMAGE GENERATION ERROR:\n" + message;
+    toast("Image generation failed: " + message);
+    console.error("easy@Ai image generation error:", e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Generate image";
+  }
+}
 function useGeneratedImageForVideo(){if(!lastImageBlob){toast('Generate an image first.');return}document.getElementById('videoFile').value='';document.getElementById('videoStatus').textContent='The latest generated image is selected as the starting frame.';document.getElementById('videoPrompt').focus()}
 async function generateVideoNow(){const prompt=document.getElementById('videoPrompt').value.trim();if(prompt.length<3){toast('Describe the motion first.');return}let headers;try{headers=authHeaders()}catch(e){return}const chosen=document.getElementById('videoFile').files[0];const image=chosen||lastImageBlob;if(!image){toast('Upload a starting image or generate an image first.');return}const btn=document.getElementById('videoGenerateBtn'),status=document.getElementById('videoStatus');btn.disabled=true;btn.textContent='Generating video…';status.textContent='Video generation can take several minutes and may be unavailable on free credits. Keep this page open.';try{const form=new FormData();form.append('prompt',prompt);form.append('model',document.getElementById('videoModel').value);form.append('image',image,chosen?chosen.name:'easy-at-ai-start-frame.png');const r=await fetch('/api/video',{method:'POST',headers,body:form});if(!r.ok)throw new Error(await responseError(r));const blob=await r.blob();if(lastVideoUrl)URL.revokeObjectURL(lastVideoUrl);lastVideoUrl=URL.createObjectURL(blob);const video=document.getElementById('generatedVideo');video.src=lastVideoUrl;video.style.display='block';const a=document.getElementById('videoDownload');a.href=lastVideoUrl;a.style.display='inline-flex';status.textContent='Video generated successfully. Preview it and download the MP4.';}catch(e){status.textContent=e.message;toast('Video generation did not complete.')}finally{btn.disabled=false;btn.textContent='Generate video'}}
 load();updateCounts();renderCharacters();renderReferences();renderProjects();renderScenes();refreshGenerationCharacters();
